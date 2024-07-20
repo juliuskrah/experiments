@@ -1,0 +1,27 @@
+<!-- extend from base layout -->
+{% extends "base.html" %}
+
+{% block content %}
+<script type="text/javascript">
+  function authenticate(){
+    document.login.submit();
+  }
+</script>
+<h1>Sign In</h1>
+<form action="" method="post" name="login">
+    {{ form.hidden_tag() }}
+    <div class="form-group">
+        <label>Use the button below to login:</label>
+    </div>
+    <div  class="checkbox">
+        <label>
+        {{ form.remember_me }} Remember Me
+        </label>
+    </div>
+    <p>
+        <a class="btn btn-block btn-social btn-yahoo" onclick="authenticate()">
+            <span class="fa fa-yahoo"></span> Sign in with Yahoo
+        </a>
+    </p>
+</form>
+{% endblock %}
