@@ -36,5 +36,8 @@ out/
 ### VS Code ###
 .vscode/
 
+### Mave
+target/
+
 ### Others
 .DS_Store
