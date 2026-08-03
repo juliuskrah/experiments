@@ -1,0 +1,127 @@
+name: hydra-kratos
+
+networks:
+  # Browser-reachable network: only Hydra's public API, Kratos's public API, mailslurper UI, and
+  # the app are published here. Hydra's Admin API sits on the internal network only — it must
+  # never be reachable by the browser or public internet (research.md §1 threat consideration).
+  public:
+  internal:
+
+services:
+  hydra-postgres:
+    image: postgres:17
+    networks: [internal]
+    environment:
+      POSTGRES_USER: hydra
+      POSTGRES_PASSWORD: hydra
+      POSTGRES_DB: hydra
+    volumes:
+      - hydra-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hydra"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  hydra-migrate:
+    image: oryd/hydra:v2.3.0
+    networks: [internal]
+    depends_on:
+      hydra-postgres:
+        condition: service_healthy
+    environment:
+      DSN: postgres://hydra:hydra@hydra-postgres:5432/hydra?sslmode=disable
+    volumes:
+      - ./hydra:/etc/config/hydra
+    command: migrate sql -e --yes -c /etc/config/hydra/config.yaml
+
+  hydra:
+    image: oryd/hydra:v2.3.0
+    networks: [public, internal]
+    depends_on:
+      hydra-migrate:
+        condition: service_completed_successfully
+    ports:
+      - "4444:4444" # public API — /oauth2/auth, /oauth2/token, /.well-known/*
+      # Admin API is published to loopback ONLY (not 0.0.0.0) — reachable from processes on this
+      # host (i.e. the Next.js app, run on the host per the note on the "app" service below) but
+      # not from the browser, other devices on the network, or the public internet. This is the
+      # same "reachable by the app, not by the browser" trust boundary as Approach A's Dex-behind-
+      # Oathkeeper design (research.md §1), adapted for an app that itself runs outside Docker.
+      - "127.0.0.1:4445:4445"
+    environment:
+      DSN: postgres://hydra:hydra@hydra-postgres:5432/hydra?sslmode=disable
+      SECRETS_SYSTEM_0: ${HYDRA_SYSTEM_SECRET}
+      SECRETS_COOKIE_0: ${HYDRA_COOKIE_SECRET}
+    volumes:
+      - ./hydra:/etc/config/hydra
+    command: serve all -c /etc/config/hydra/config.yaml --dev
+
+  kratos-postgres:
+    image: postgres:17
+    networks: [internal]
+    environment:
+      POSTGRES_USER: kratos
+      POSTGRES_PASSWORD: kratos
+      POSTGRES_DB: kratos
+    volumes:
+      - kratos-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kratos"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  kratos-migrate:
+    image: oryd/kratos:v1.3.1
+    networks: [internal]
+    depends_on:
+      kratos-postgres:
+        condition: service_healthy
+    environment:
+      DSN: postgres://kratos:kratos@kratos-postgres:5432/kratos?sslmode=disable
+    volumes:
+      - ./kratos:/etc/config/kratos
+    command: -c /etc/config/kratos/kratos.yml migrate sql -e --yes
+
+  kratos:
+    image: oryd/kratos:v1.3.1
+    networks: [public, internal]
+    depends_on:
+      kratos-migrate:
+        condition: service_completed_successfully
+    ports:
+      - "4433:4433"
+      # Admin API published to loopback ONLY (not 0.0.0.0) — the login/consent bridge (running on
+      # the host) looks up identity traits here to populate ID token claims; the browser and other
+      # devices on the network must not be able to reach it (same trust boundary as Hydra's own
+      # admin port above).
+      - "127.0.0.1:4434:4434"
+    environment:
+      DSN: postgres://kratos:kratos@kratos-postgres:5432/kratos?sslmode=disable
+      SECRETS_COOKIE_0: ${KRATOS_COOKIE_SECRET}
+      SECRETS_CIPHER_0: ${KRATOS_CIPHER_SECRET}
+    volumes:
+      - ./kratos:/etc/config/kratos
+    command: serve -c /etc/config/kratos/kratos.yml --dev --watch-courier
+
+  mailslurper:
+    image: oryd/mailslurper:latest-smtps
+    networks: [public, internal]
+    ports:
+      - "4436:4436" # web UI
+      - "4437:4437" # REST API
+
+# The Next.js app is intentionally NOT a Compose service — same reasoning as the sibling
+# dex-oathkeeper-kratos app (see its research.md §7a): Hydra's issuer (http://localhost:4444, see
+# deploy/hydra/config.yaml's urls.self.issuer) must be one single URL that both the browser and the
+# app's own server-side openid-client discovery call resolve identically. Running the app on the
+# host, not in a container, means "localhost" means the same thing in both places. Run it with:
+# npm run dev (see .env.example / README.md for the required environment variables, all pointed at
+# the ports this Compose file publishes to the host — HYDRA_ADMIN_URL=http://localhost:4445, which
+# only the host — not the browser, not other containers — can reach, per the 127.0.0.1-only port
+# publish above).
+
+volumes:
+  hydra-postgres:
+  kratos-postgres:

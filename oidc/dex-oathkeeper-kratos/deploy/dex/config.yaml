@@ -1,0 +1,35 @@
+# Must match the URL the browser/relying-party actually uses to reach Dex — i.e. through
+# Oathkeeper, not Dex's own internal listen address — because this value is baked into the "iss"
+# claim of every token Dex signs, and openid-client's discovery() rejects a mismatch between the
+# URL it fetched metadata from and the metadata's own "issuer" field.
+issuer: http://localhost:4455/dex
+
+storage:
+  type: sqlite3
+  config:
+    file: /var/dex/dex.db
+
+web:
+  http: 0.0.0.0:5556
+
+# Dex is never exposed to the browser or other containers directly — only
+# Oathkeeper can reach this port (see deploy/compose.yml network topology and
+# research.md §1 threat consideration on forged X-Remote-* headers).
+connectors:
+  - type: authproxy
+    id: kratos-authproxy
+    name: Kratos
+    config:
+      userIDHeader: X-Remote-User
+      userHeader: X-Remote-Name
+      emailHeader: X-Remote-Email
+
+oauth2:
+  skipApprovalScreen: true
+
+staticClients:
+  - id: '{{ .Env.DEX_CLIENT_ID }}'
+    secret: '{{ .Env.DEX_CLIENT_SECRET }}'
+    name: dex-via-kratos
+    redirectURIs:
+      - http://localhost:3000/api/auth/callback

@@ -1,0 +1,43 @@
+{
+  "name": "hydra-kratos",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "test:unit": "vitest run",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "next": "16.2.12",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "openid-client": "6.8.4",
+    "jose": "6.2.6",
+    "@ory/elements-react": "1.2.1",
+    "@ory/nextjs": "1.0.0-rc.1",
+    "@ory/client-fetch": "1.22.66",
+    "@ory/hydra-client-fetch": "26.2.0"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "@types/node": "24.9.2",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "eslint": "9.39.1",
+    "eslint-config-next": "16.2.12",
+    "vitest": "3.2.7",
+    "@vitejs/plugin-react": "5.0.4",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/jest-dom": "6.9.1",
+    "jsdom": "27.0.1",
+    "@playwright/test": "1.62.1"
+  },
+  "overrides": {
+    "postcss": "8.5.25",
+    "sharp": "0.35.3"
+  }
+}
