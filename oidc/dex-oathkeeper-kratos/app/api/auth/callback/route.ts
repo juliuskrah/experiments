@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logAuditEvent } from "@/app/lib/audit-log";
 import { SESSION_EVENT_COOKIE_NAME } from "@/app/lib/broadcast";
-import { decodePkceCookie, exchangeAuthorizationCode, getDexConfig, PKCE_COOKIE_NAME } from "@/app/lib/oidc-client";
+import {
+  decodePkceCookie,
+  exchangeAuthorizationCode,
+  getDexConfig,
+  PKCE_COOKIE_NAME,
+  sanitizeReturnTo,
+} from "@/app/lib/oidc-client";
 import { encodeSession, sessionFromClaims, SESSION_COOKIE_NAME } from "@/app/lib/session";
 
 function redirectToLoginWithError(request: NextRequest, reason: string) {
@@ -56,7 +62,10 @@ export async function GET(request: NextRequest) {
 
   logAuditEvent({ type: "login_success", sub, email });
 
-  const returnTo = pkce.returnTo ?? "/";
+  // Defense in depth: the PKCE cookie's `returnTo` was already sanitized at the login route (its
+  // input boundary), but re-sanitizing here means this redirect can never become open regardless
+  // of how `returnTo` got into the cookie.
+  const returnTo = sanitizeReturnTo(pkce.returnTo) ?? "/";
   const response = NextResponse.redirect(new URL(returnTo, request.url), 302);
   response.cookies.delete(PKCE_COOKIE_NAME);
   response.cookies.set(SESSION_COOKIE_NAME, sessionCookie, {

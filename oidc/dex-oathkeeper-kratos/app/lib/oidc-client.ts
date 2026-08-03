@@ -78,6 +78,32 @@ export async function decodePkceCookie(token: string): Promise<PkceCookiePayload
   }
 }
 
+// Never resolved against a real origin — only used to detect whether `returnTo` would escape
+// the app's own origin once resolved, the same way a browser resolves a redirect Location.
+const SANITIZE_BASE = "http://sanitize-return-to.invalid";
+
+/**
+ * Restricts `return_to` to same-origin, absolute-path-local values. Without this, an attacker
+ * can set `return_to=https://attacker.example` (or a protocol-relative `//attacker.example`) and
+ * turn a legitimate login into an open redirect once the app resolves it in the callback route.
+ * Returns `undefined` for anything that isn't a safe local path — including empty/missing input.
+ */
+export function sanitizeReturnTo(returnTo: string | null | undefined): string | undefined {
+  if (!returnTo || !returnTo.startsWith("/")) {
+    return undefined;
+  }
+  let resolved: URL;
+  try {
+    resolved = new URL(returnTo, SANITIZE_BASE);
+  } catch {
+    return undefined;
+  }
+  if (resolved.origin !== SANITIZE_BASE) {
+    return undefined;
+  }
+  return resolved.pathname + resolved.search + resolved.hash;
+}
+
 export function buildAuthorizationUrl(
   config: client.Configuration,
   redirectUri: string,

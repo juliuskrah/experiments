@@ -13,7 +13,7 @@ services:
     networks: [internal]
     environment:
       POSTGRES_USER: hydra
-      POSTGRES_PASSWORD: hydra
+      POSTGRES_PASSWORD: ${HYDRA_DB_PASSWORD}
       POSTGRES_DB: hydra
     volumes:
       - hydra-postgres:/var/lib/postgresql/data
@@ -30,7 +30,7 @@ services:
       hydra-postgres:
         condition: service_healthy
     environment:
-      DSN: postgres://hydra:hydra@hydra-postgres:5432/hydra?sslmode=disable
+      DSN: postgres://hydra:${HYDRA_DB_PASSWORD}@hydra-postgres:5432/hydra?sslmode=disable
     volumes:
       - ./hydra:/etc/config/hydra
     command: migrate sql -e --yes -c /etc/config/hydra/config.yaml
@@ -50,19 +50,51 @@ services:
       # Oathkeeper design (research.md §1), adapted for an app that itself runs outside Docker.
       - "127.0.0.1:4445:4445"
     environment:
-      DSN: postgres://hydra:hydra@hydra-postgres:5432/hydra?sslmode=disable
+      DSN: postgres://hydra:${HYDRA_DB_PASSWORD}@hydra-postgres:5432/hydra?sslmode=disable
       SECRETS_SYSTEM_0: ${HYDRA_SYSTEM_SECRET}
       SECRETS_COOKIE_0: ${HYDRA_COOKIE_SECRET}
     volumes:
       - ./hydra:/etc/config/hydra
     command: serve all -c /etc/config/hydra/config.yaml --dev
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:4445/health/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # One-shot: registers this app's OAuth2 client with Hydra so the first /oauth2/auth request
+  # doesn't fail against a freshly migrated, empty database (a clean checkout previously had no
+  # documented way to do this). Idempotent — `hydra get` exits non-zero only when the client is
+  # missing, so re-running Compose against an already-provisioned Hydra is a no-op.
+  hydra-client-setup:
+    image: oryd/hydra:v2.3.0
+    networks: [internal]
+    depends_on:
+      hydra:
+        condition: service_healthy
+    environment:
+      HYDRA_CLIENT_ID: ${HYDRA_CLIENT_ID}
+      HYDRA_CLIENT_SECRET: ${HYDRA_CLIENT_SECRET}
+    entrypoint: sh
+    command:
+      - -c
+      - |
+        hydra get oauth2-client "$$HYDRA_CLIENT_ID" -e http://hydra:4445 >/dev/null 2>&1 && exit 0
+        hydra create oauth2-client -e http://hydra:4445 \
+          --id "$$HYDRA_CLIENT_ID" \
+          --secret "$$HYDRA_CLIENT_SECRET" \
+          --grant-type authorization_code,refresh_token \
+          --response-type code \
+          --scope openid,profile,email,offline_access \
+          --redirect-uri http://localhost:3000/api/auth/callback \
+          --token-endpoint-auth-method client_secret_post
 
   kratos-postgres:
     image: postgres:17
     networks: [internal]
     environment:
       POSTGRES_USER: kratos
-      POSTGRES_PASSWORD: kratos
+      POSTGRES_PASSWORD: ${KRATOS_DB_PASSWORD}
       POSTGRES_DB: kratos
     volumes:
       - kratos-postgres:/var/lib/postgresql/data
@@ -79,7 +111,7 @@ services:
       kratos-postgres:
         condition: service_healthy
     environment:
-      DSN: postgres://kratos:kratos@kratos-postgres:5432/kratos?sslmode=disable
+      DSN: postgres://kratos:${KRATOS_DB_PASSWORD}@kratos-postgres:5432/kratos?sslmode=disable
     volumes:
       - ./kratos:/etc/config/kratos
     command: -c /etc/config/kratos/kratos.yml migrate sql -e --yes
@@ -98,7 +130,7 @@ services:
       # admin port above).
       - "127.0.0.1:4434:4434"
     environment:
-      DSN: postgres://kratos:kratos@kratos-postgres:5432/kratos?sslmode=disable
+      DSN: postgres://kratos:${KRATOS_DB_PASSWORD}@kratos-postgres:5432/kratos?sslmode=disable
       SECRETS_COOKIE_0: ${KRATOS_COOKIE_SECRET}
       SECRETS_CIPHER_0: ${KRATOS_CIPHER_SECRET}
     volumes:

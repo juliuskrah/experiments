@@ -39,15 +39,19 @@ describe("GET /api/auth/session — refresh attempt with an invalid/expired/revo
       createdAt: past - 3600,
     });
 
+    // Kratos session is valid — isolates this test to Hydra's own rejection of the refresh
+    // token, distinct from refresh-kratos-session-ended.test.ts's case.
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 200 })));
     mockRefreshTokenGrant.mockRejectedValue(new Error("invalid_grant"));
 
     const { GET } = await import("@/app/api/auth/session/route");
     const request = new NextRequest("http://localhost:3000/api/auth/session", {
-      headers: { cookie: `session=${staleSessionCookie}` },
+      headers: { cookie: `session=${staleSessionCookie}; ory_kratos_session=still-valid` },
     });
     const response = await GET(request);
     const body = await response.json();
 
+    expect(mockRefreshTokenGrant).toHaveBeenCalled();
     expect(body).toEqual({ authenticated: false });
     expect(response.cookies.get("session")?.value).toBe("");
   });

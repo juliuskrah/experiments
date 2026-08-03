@@ -51,12 +51,17 @@ See `specs/002-oidc-hydra-kratos/research.md` §2–§3 for the full writeup, an
 Prerequisites: Docker, Node.js, npm.
 
 1. Copy `.env.example` to `.env` and fill in real values for `HYDRA_CLIENT_SECRET`,
-   `SESSION_SECRET`, `HYDRA_SYSTEM_SECRET`, `HYDRA_COOKIE_SECRET`, `KRATOS_COOKIE_SECRET`,
-   `KRATOS_CIPHER_SECRET` (dev-only, rotatable — never commit `.env`).
+   `SESSION_SECRET`, `HYDRA_SYSTEM_SECRET`, `HYDRA_COOKIE_SECRET`, `HYDRA_DB_PASSWORD`,
+   `KRATOS_COOKIE_SECRET`, `KRATOS_CIPHER_SECRET`, `KRATOS_DB_PASSWORD` (dev-only, rotatable —
+   never commit `.env`).
 2. Start the backing services:
    ```sh
    docker compose --env-file .env -f deploy/compose.yml up
    ```
+   A one-shot `hydra-client-setup` service automatically registers this app's OAuth2 client with
+   Hydra (`HYDRA_CLIENT_ID`/`HYDRA_CLIENT_SECRET`) once Hydra reports healthy — no manual
+   registration step is needed, including on a fresh/empty database. It's idempotent, so re-running
+   Compose against an already-provisioned Hydra is a no-op.
 3. In a separate terminal, run the Next.js app on the host (not in Docker — for the same reason as
    the sibling app: Hydra's issuer URL must resolve identically for the browser and for the app's
    server-side OIDC discovery call, which only holds if both mean `localhost`):
@@ -75,8 +80,10 @@ Prerequisites: Docker, Node.js, npm.
 | `HYDRA_CLIENT_ID` | OAuth2 client ID registered with Hydra |
 | `HYDRA_CLIENT_SECRET` | OAuth2 client secret registered with Hydra |
 | `SESSION_SECRET` | Symmetric key for encrypting the app's session cookie |
+| `HYDRA_DB_PASSWORD` | Password for Hydra's Postgres role (`deploy/compose.yml`) |
 | `KRATOS_PUBLIC_URL` | Kratos's public API base URL |
 | `KRATOS_ADMIN_URL` | Kratos's Admin API base URL, used to look up identity traits for the consent bridge |
+| `KRATOS_DB_PASSWORD` | Password for Kratos's Postgres role (`deploy/compose.yml`) |
 
 ## Testing
 

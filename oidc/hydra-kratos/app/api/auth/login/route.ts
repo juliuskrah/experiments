@@ -6,10 +6,11 @@ import {
   getHydraConfig,
   PKCE_COOKIE_MAX_AGE_SECONDS,
   PKCE_COOKIE_NAME,
+  sanitizeReturnTo,
 } from "@/app/lib/oidc-client";
 
 export async function GET(request: NextRequest) {
-  const returnTo = request.nextUrl.searchParams.get("return_to") ?? undefined;
+  const returnTo = sanitizeReturnTo(request.nextUrl.searchParams.get("return_to"));
   const pkce = await generatePkceParams();
   const config = await getHydraConfig();
 

@@ -25,19 +25,7 @@ describe("GET /hydra/login", () => {
     expect(mockGetLoginRequest).not.toHaveBeenCalled();
   });
 
-  it("accepts immediately with the existing subject when Hydra reports skip: true", async () => {
-    mockGetLoginRequest.mockResolvedValue({ skip: true, subject: "user-1" });
-    mockAcceptLoginRequest.mockResolvedValue({ redirect_to: "http://localhost:4444/oauth2/auth?consent=1" });
-
-    const { GET } = await import("@/app/hydra/login/route");
-    const response = await GET(new NextRequest("http://localhost:3000/hydra/login?login_challenge=abc"));
-
-    expect(mockAcceptLoginRequest).toHaveBeenCalledWith("abc", { subject: "user-1" });
-    expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe("http://localhost:4444/oauth2/auth?consent=1");
-  });
-
-  it("accepts with remember/rememberFor when skip is false but a valid Kratos session cookie is present", async () => {
+  it("accepts with the subject from a fresh Kratos check when a valid session cookie is present", async () => {
     mockGetLoginRequest.mockResolvedValue({ skip: false, subject: "" });
     mockAcceptLoginRequest.mockResolvedValue({ redirect_to: "http://localhost:4444/oauth2/auth?consent=1" });
     vi.stubGlobal(
@@ -53,12 +41,11 @@ describe("GET /hydra/login", () => {
     });
     const response = await GET(request);
 
-    expect(mockAcceptLoginRequest).toHaveBeenCalledWith("abc", {
-      subject: "user-1",
-      remember: true,
-      rememberFor: 24 * 60 * 60,
-    });
+    // No `remember`/`rememberFor` — Kratos, not a Hydra-side remembered login, is the sole
+    // persistent session authority (research.md §5).
+    expect(mockAcceptLoginRequest).toHaveBeenCalledWith("abc", { subject: "user-1" });
     expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("http://localhost:4444/oauth2/auth?consent=1");
   });
 
   it("redirects to /kratos/login with a return_to resuming this challenge when there is no Kratos session cookie", async () => {
@@ -83,6 +70,20 @@ describe("GET /hydra/login", () => {
       headers: { cookie: "ory_kratos_session=expired-or-invalid" },
     });
     const response = await GET(request);
+
+    expect(mockAcceptLoginRequest).not.toHaveBeenCalled();
+    expect(new URL(response.headers.get("location")!).pathname).toBe("/kratos/login");
+  });
+
+  // Regression test: Hydra reporting `skip: true` (a remembered login from a prior visit) must
+  // NOT bypass the Kratos check. If the Kratos session has since ended (logout, expiry, revoked
+  // cookie) while Hydra's remembered-login window is still open, this route must still redirect
+  // to /kratos/login rather than silently recreating an app session Kratos no longer backs.
+  it("does not trust Hydra's skip:true when there is no valid Kratos session — redirects to /kratos/login instead", async () => {
+    mockGetLoginRequest.mockResolvedValue({ skip: true, subject: "user-1" });
+
+    const { GET } = await import("@/app/hydra/login/route");
+    const response = await GET(new NextRequest("http://localhost:3000/hydra/login?login_challenge=abc"));
 
     expect(mockAcceptLoginRequest).not.toHaveBeenCalled();
     expect(new URL(response.headers.get("location")!).pathname).toBe("/kratos/login");

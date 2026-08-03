@@ -12,7 +12,7 @@ services:
     networks: [internal]
     environment:
       POSTGRES_USER: kratos
-      POSTGRES_PASSWORD: kratos
+      POSTGRES_PASSWORD: ${KRATOS_DB_PASSWORD}
       POSTGRES_DB: kratos
     volumes:
       - kratos-postgres:/var/lib/postgresql/data
@@ -29,7 +29,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DSN: postgres://kratos:kratos@postgres:5432/kratos?sslmode=disable
+      DSN: postgres://kratos:${KRATOS_DB_PASSWORD}@postgres:5432/kratos?sslmode=disable
     volumes:
       - ./kratos:/etc/config/kratos
     command: -c /etc/config/kratos/kratos.yml migrate sql -e --yes
@@ -43,7 +43,7 @@ services:
     ports:
       - "4433:4433"
     environment:
-      DSN: postgres://kratos:kratos@postgres:5432/kratos?sslmode=disable
+      DSN: postgres://kratos:${KRATOS_DB_PASSWORD}@postgres:5432/kratos?sslmode=disable
       SECRETS_COOKIE_0: ${KRATOS_COOKIE_SECRET}
       SECRETS_CIPHER_0: ${KRATOS_CIPHER_SECRET}
     volumes:

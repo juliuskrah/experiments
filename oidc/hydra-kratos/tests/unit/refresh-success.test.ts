@@ -27,7 +27,7 @@ beforeEach(() => {
 });
 
 describe("GET /api/auth/session — expired access token + valid refresh token", () => {
-  it("performs a refresh_token grant against Hydra, re-checks the Kratos session, and establishes a fresh Session with the rotated refresh token", async () => {
+  it("re-checks the Kratos session, then performs a refresh_token grant against Hydra, and establishes a fresh Session with the rotated refresh token", async () => {
     const { encodeSession } = await import("@/app/lib/session");
 
     const past = Math.floor(Date.now() / 1000) - 3600;

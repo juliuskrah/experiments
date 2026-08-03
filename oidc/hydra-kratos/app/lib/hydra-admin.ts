@@ -23,15 +23,11 @@ export function getLoginRequest(loginChallenge: string): Promise<OAuth2LoginRequ
 
 export function acceptLoginRequest(
   loginChallenge: string,
-  params: { subject: string; remember?: boolean; rememberFor?: number },
+  params: { subject: string },
 ): Promise<OAuth2RedirectTo> {
   return getHydraAdminApi().acceptOAuth2LoginRequest({
     loginChallenge,
-    acceptOAuth2LoginRequest: {
-      subject: params.subject,
-      remember: params.remember,
-      remember_for: params.rememberFor,
-    },
+    acceptOAuth2LoginRequest: { subject: params.subject },
   });
 }
 

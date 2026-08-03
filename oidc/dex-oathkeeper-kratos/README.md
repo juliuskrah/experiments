@@ -43,8 +43,8 @@ See `specs/001-oidc-dex-oathkeeper/research.md` §3 (revised) for the full write
 Prerequisites: Docker, Node.js, npm.
 
 1. Copy `.env.example` to `.env` and fill in real values for `DEX_CLIENT_SECRET`,
-   `SESSION_SECRET`, `KRATOS_COOKIE_SECRET`, `KRATOS_CIPHER_SECRET` (dev-only, rotatable — never
-   commit `.env`).
+   `SESSION_SECRET`, `KRATOS_COOKIE_SECRET`, `KRATOS_CIPHER_SECRET`, `KRATOS_DB_PASSWORD`
+   (dev-only, rotatable — never commit `.env`).
 2. Start the backing services:
    ```sh
    docker compose --env-file .env -f deploy/compose.yml up
@@ -67,6 +67,7 @@ Prerequisites: Docker, Node.js, npm.
 | `DEX_CLIENT_SECRET` | OAuth2 client secret registered with Dex |
 | `SESSION_SECRET` | Symmetric key for encrypting the app's session cookie |
 | `KRATOS_PUBLIC_URL` | Kratos's public API base URL |
+| `KRATOS_DB_PASSWORD` | Password for Kratos's Postgres role (`deploy/compose.yml`) |
 | `ORY_SDK_URL` | Base URL `@ory/nextjs` uses to proxy `/self-service/*` flow requests to Kratos |
 
 ## Testing

@@ -5,10 +5,50 @@ import {
   encodePkceCookie,
   generatePkceParams,
   OIDC_SCOPES,
+  sanitizeReturnTo,
 } from "@/app/lib/oidc-client";
 
 beforeAll(() => {
   process.env.SESSION_SECRET = "test-session-secret-0123456789ab";
+});
+
+describe("sanitizeReturnTo", () => {
+  it("accepts a plain same-origin absolute path", () => {
+    expect(sanitizeReturnTo("/some/protected/path")).toBe("/some/protected/path");
+  });
+
+  it("preserves query strings and hashes on an accepted path", () => {
+    expect(sanitizeReturnTo("/dashboard?tab=billing#section")).toBe("/dashboard?tab=billing#section");
+  });
+
+  it("rejects an absolute URL to a different origin", () => {
+    expect(sanitizeReturnTo("https://attacker.example")).toBeUndefined();
+    expect(sanitizeReturnTo("http://attacker.example/path")).toBeUndefined();
+  });
+
+  it("rejects a protocol-relative URL (open-redirect via //host)", () => {
+    expect(sanitizeReturnTo("//attacker.example")).toBeUndefined();
+    expect(sanitizeReturnTo("///attacker.example")).toBeUndefined();
+  });
+
+  it("rejects a backslash-prefixed value some browsers normalize to a protocol-relative URL", () => {
+    expect(sanitizeReturnTo("/\\attacker.example")).toBeUndefined();
+  });
+
+  it("rejects values that don't start with a single leading slash", () => {
+    expect(sanitizeReturnTo("attacker.example")).toBeUndefined();
+    expect(sanitizeReturnTo("javascript:alert(1)")).toBeUndefined();
+  });
+
+  it("rejects empty, missing, or non-string input", () => {
+    expect(sanitizeReturnTo("")).toBeUndefined();
+    expect(sanitizeReturnTo(null)).toBeUndefined();
+    expect(sanitizeReturnTo(undefined)).toBeUndefined();
+  });
+
+  it("accepts the root path", () => {
+    expect(sanitizeReturnTo("/")).toBe("/");
+  });
 });
 
 describe("OIDC_SCOPES", () => {

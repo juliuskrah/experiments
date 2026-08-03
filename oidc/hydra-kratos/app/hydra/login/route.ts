@@ -2,9 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { acceptLoginRequest, getLoginRequest } from "@/app/lib/hydra-admin";
 
 const KRATOS_SESSION_COOKIE_NAME = "ory_kratos_session";
-// Bounded by Kratos's own session.lifespan (default 24h) so a Hydra-"remembered" login can never
-// outlive the Kratos session it was based on (research.md §5).
-const REMEMBER_FOR_SECONDS = 24 * 60 * 60;
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -35,14 +32,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "missing login_challenge" }, { status: 400 });
   }
 
-  const loginRequest = await getLoginRequest(loginChallenge);
-
-  if (loginRequest.skip) {
-    const { redirect_to } = await acceptLoginRequest(loginChallenge, {
-      subject: loginRequest.subject,
-    });
-    return NextResponse.redirect(redirect_to, 302);
-  }
+  // Validates the challenge exists before doing anything else, but its `skip`/`subject` fields
+  // are intentionally never trusted for the accept decision below: Kratos, not Hydra's own
+  // remembered-login cookie, is the sole persistent session authority (research.md §5). A
+  // "remembered" Hydra login can outlive the Kratos session it was originally based on (e.g.
+  // after logout, or an expired/revoked Kratos session) — accepting it blindly on `skip: true`
+  // would silently recreate an app session that the identity-session check just invalidated.
+  await getLoginRequest(loginChallenge);
 
   const kratosCookie = request.headers.get("cookie") ?? undefined;
   const hasCookie = kratosCookie?.includes(`${KRATOS_SESSION_COOKIE_NAME}=`) ?? false;
@@ -55,10 +51,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(kratosLoginUrl, 302);
   }
 
-  const { redirect_to } = await acceptLoginRequest(loginChallenge, {
-    subject,
-    remember: true,
-    rememberFor: REMEMBER_FOR_SECONDS,
-  });
+  // No `remember`/`rememberFor`: an independent Hydra-side "remembered login" would let this
+  // route skip its own Kratos check on a future request, which is exactly the stale-session gap
+  // being fixed here.
+  const { redirect_to } = await acceptLoginRequest(loginChallenge, { subject });
   return NextResponse.redirect(redirect_to, 302);
 }
