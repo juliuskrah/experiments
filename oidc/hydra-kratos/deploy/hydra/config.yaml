@@ -1,0 +1,45 @@
+serve:
+  public:
+    port: 4444
+    cors:
+      enabled: true
+      allowed_origins:
+        - http://localhost:3000
+  admin:
+    port: 4445
+    # The admin API is never published to the host or reachable from the browser — see
+    # deploy/compose.yml network topology and research.md §1 threat consideration.
+
+urls:
+  self:
+    issuer: http://localhost:4444
+    public: http://localhost:4444
+    # Reachable only from the host (see deploy/compose.yml's 127.0.0.1-only port publish) — the
+    # Next.js app runs on the host, not in a container, so this must be a host-reachable URL, not
+    # the Docker-internal "hydra:4445" hostname.
+    admin: http://localhost:4445
+  # Point Hydra's login/consent delegation at this app's own bridge routes (research.md §2).
+  login: http://localhost:3000/hydra/login
+  consent: http://localhost:3000/hydra/consent
+
+# secrets.system / secrets.cookie are intentionally omitted here — like Kratos (see the sibling
+# dex-oathkeeper-kratos app's research.md §7), Hydra's config loader does not expand $VAR
+# placeholders inside YAML values. Hydra reads them instead from the SECRETS_SYSTEM_0 /
+# SECRETS_COOKIE_0 environment variables (see deploy/compose.yml), so the actual secret values
+# never appear in this version-controlled file.
+
+ttl:
+  access_token: 1h
+  refresh_token: 720h
+  id_token: 1h
+  auth_code: 10m
+  login_consent_request: 30m
+
+oauth2:
+  grant:
+    refresh_token:
+      rotation_grace_period: 0s
+
+log:
+  level: info
+  format: json

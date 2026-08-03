@@ -1,0 +1,33 @@
+import { expect, test } from "@playwright/test";
+
+// Exercises quickstart.md Scenario 1 against the full Docker Compose stack
+// (deploy/compose.yml): a visitor with no session is redirected to Login,
+// completes the OIDC Authorization Code + PKCE flow via Dex/Oathkeeper/Kratos,
+// and lands on the Welcome page addressed by name.
+test("first-time login redirects to Login, then to Welcome after authorization", async ({ page }) => {
+  await page.goto("/");
+
+  await expect(page).toHaveURL(/\/login/);
+  const continueButton = page.getByRole("button", { name: /continue with/i });
+  await expect(continueButton).toBeVisible();
+
+  await continueButton.click();
+
+  // Oathkeeper redirects to the Kratos login page rendered by this app when no
+  // Kratos session exists yet.
+  await expect(page).toHaveURL(/\/kratos\/login/);
+
+  await page.getByTestId("ory/screen/login/action/register").click();
+  await expect(page).toHaveURL(/\/kratos\/registration/);
+
+  const email = `first-login-e2e-${Date.now()}@example.com`;
+  await page.getByPlaceholder(/e-?mail/i).fill(email);
+  await page.getByPlaceholder(/first name/i).fill("First");
+  await page.getByPlaceholder(/last name/i).fill("Login");
+  await page.getByRole("button", { name: /sign up/i }).click();
+  await page.getByPlaceholder(/password/i).fill("correct-horse-battery-staple");
+  await page.getByRole("button", { name: /sign up/i }).click();
+
+  await expect(page).toHaveURL("/");
+  await expect(page.getByText(/hello,/i)).toBeVisible();
+});

@@ -1,0 +1,109 @@
+[
+  {
+    "id": "dex-authproxy-callback",
+    "version": "v0.40.0",
+    "comment": "Dex's authproxy connector reads its trusted X-Remote-* headers inside handleConnectorCallback (server/handlers.go), which serves /callback/{connector} — NOT /auth/{connector}, which merely creates the AuthRequest and redirects here. This is where the browser's Kratos session must actually be checked.",
+    "match": {
+      "url": "http://<*>:4455/dex/callback<**>",
+      "methods": ["GET", "POST"]
+    },
+    "authenticators": [
+      {
+        "handler": "cookie_session"
+      }
+    ],
+    "authorizer": {
+      "handler": "allow"
+    },
+    "mutators": [
+      {
+        "handler": "header",
+        "config": {
+          "headers": {
+            "X-Remote-User": "{{ print .Subject }}",
+            "X-Remote-Email": "{{ print .Extra.identity.traits.email }}",
+            "X-Remote-Name": "{{ print .Extra.identity.traits.name.first }} {{ print .Extra.identity.traits.name.last }}"
+          }
+        }
+      }
+    ],
+    "upstream": {
+      "url": "http://dex:5556",
+      "preserve_host": false
+    },
+    "errors": [
+      {
+        "handler": "redirect",
+        "config": {
+          "to": "http://localhost:3000/kratos/login",
+          "return_to_query_param": "return_to"
+        }
+      }
+    ]
+  },
+  {
+    "id": "dex-passthrough-auth",
+    "version": "v0.40.0",
+    "comment": "/auth and /auth/{connector} only create the AuthRequest and redirect to /callback/{connector} (server/handlers.go's handleConnectorLogin) — no trusted headers are read here, so no cookie_session check is needed. See dex-authproxy-callback for where the actual header check happens.",
+    "match": {
+      "url": "http://<*>:4455/dex/auth<**>",
+      "methods": ["GET", "POST"]
+    },
+    "authenticators": [{ "handler": "noop" }],
+    "authorizer": { "handler": "allow" },
+    "mutators": [{ "handler": "noop" }],
+    "upstream": { "url": "http://dex:5556", "preserve_host": false }
+  },
+  {
+    "id": "dex-passthrough-wellknown",
+    "version": "v0.40.0",
+    "comment": "Server-to-server Dex discovery endpoint that the authproxy connector never inspects — no browser cookie is available on this call, so it must not require cookie_session. Split into one rule per path (rather than a /dex/<**> catch-all, or a pipe-alternation glob, which Oathkeeper's glob matching strategy does not support) to avoid overlapping with dex-authproxy-callback's /dex/callback<**> match — Oathkeeper requires exactly one rule match per request.",
+    "match": {
+      "url": "http://<*>:4455/dex/.well-known<**>",
+      "methods": ["GET"]
+    },
+    "authenticators": [{ "handler": "noop" }],
+    "authorizer": { "handler": "allow" },
+    "mutators": [{ "handler": "noop" }],
+    "upstream": { "url": "http://dex:5556", "preserve_host": false }
+  },
+  {
+    "id": "dex-passthrough-token",
+    "version": "v0.40.0",
+    "comment": "Server-to-server code/refresh-token exchange — see dex-passthrough-wellknown comment.",
+    "match": {
+      "url": "http://<*>:4455/dex/token<**>",
+      "methods": ["GET", "POST"]
+    },
+    "authenticators": [{ "handler": "noop" }],
+    "authorizer": { "handler": "allow" },
+    "mutators": [{ "handler": "noop" }],
+    "upstream": { "url": "http://dex:5556", "preserve_host": false }
+  },
+  {
+    "id": "dex-passthrough-keys",
+    "version": "v0.40.0",
+    "comment": "JWKS endpoint used to verify ID token signatures — see dex-passthrough-wellknown comment.",
+    "match": {
+      "url": "http://<*>:4455/dex/keys<**>",
+      "methods": ["GET"]
+    },
+    "authenticators": [{ "handler": "noop" }],
+    "authorizer": { "handler": "allow" },
+    "mutators": [{ "handler": "noop" }],
+    "upstream": { "url": "http://dex:5556", "preserve_host": false }
+  },
+  {
+    "id": "dex-passthrough-userinfo",
+    "version": "v0.40.0",
+    "comment": "OIDC userinfo endpoint — see dex-passthrough-wellknown comment.",
+    "match": {
+      "url": "http://<*>:4455/dex/userinfo<**>",
+      "methods": ["GET"]
+    },
+    "authenticators": [{ "handler": "noop" }],
+    "authorizer": { "handler": "allow" },
+    "mutators": [{ "handler": "noop" }],
+    "upstream": { "url": "http://dex:5556", "preserve_host": false }
+  }
+]

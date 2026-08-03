@@ -1,0 +1,91 @@
+name: dex-via-kratos
+
+networks:
+  # Browser-reachable network: only Oathkeeper, Kratos's public API, mailslurper UI, and the app
+  # are published here. Dex sits on the internal network only (research.md §1 threat consideration).
+  public:
+  internal:
+
+services:
+  postgres:
+    image: postgres:17
+    networks: [internal]
+    environment:
+      POSTGRES_USER: kratos
+      POSTGRES_PASSWORD: ${KRATOS_DB_PASSWORD}
+      POSTGRES_DB: kratos
+    volumes:
+      - kratos-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kratos"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  kratos-migrate:
+    image: oryd/kratos:v1.3.1
+    networks: [internal]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DSN: postgres://kratos:${KRATOS_DB_PASSWORD}@postgres:5432/kratos?sslmode=disable
+    volumes:
+      - ./kratos:/etc/config/kratos
+    command: -c /etc/config/kratos/kratos.yml migrate sql -e --yes
+
+  kratos:
+    image: oryd/kratos:v1.3.1
+    networks: [public, internal]
+    depends_on:
+      kratos-migrate:
+        condition: service_completed_successfully
+    ports:
+      - "4433:4433"
+    environment:
+      DSN: postgres://kratos:${KRATOS_DB_PASSWORD}@postgres:5432/kratos?sslmode=disable
+      SECRETS_COOKIE_0: ${KRATOS_COOKIE_SECRET}
+      SECRETS_CIPHER_0: ${KRATOS_CIPHER_SECRET}
+    volumes:
+      - ./kratos:/etc/config/kratos
+    command: serve -c /etc/config/kratos/kratos.yml --dev --watch-courier
+
+  mailslurper:
+    image: oryd/mailslurper:latest-smtps
+    networks: [public, internal]
+    ports:
+      - "4436:4436" # web UI
+      - "4437:4437" # REST API
+
+  dex:
+    image: dexidp/dex:v2.44.0
+    networks: [internal] # not published — reachable only via Oathkeeper on the internal network
+    environment:
+      DEX_CLIENT_ID: ${DEX_CLIENT_ID}
+      DEX_CLIENT_SECRET: ${DEX_CLIENT_SECRET}
+    volumes:
+      - ./dex/config.yaml:/etc/dex/config.yaml
+      - dex-data:/var/dex
+    command: dex serve /etc/dex/config.yaml
+
+  oathkeeper:
+    image: oryd/oathkeeper:v0.40.9
+    networks: [public, internal]
+    depends_on: [dex, kratos]
+    ports:
+      - "4455:4455"
+    volumes:
+      - ./oathkeeper:/etc/config/oathkeeper
+    command: serve proxy -c /etc/config/oathkeeper/config.yaml
+
+# The Next.js app is intentionally NOT a Compose service. Dex's `issuer` (http://localhost:4455/dex,
+# see deploy/dex/config.yaml) must be one single URL that both the browser AND the app's server-side
+# openid-client discovery call resolve identically — openid-client rejects a mismatch between the
+# issuer it discovers and the URL it fetched from. Running the app on the host, not in a container,
+# means "localhost" means the same thing in both places, with no Docker-network-name workaround
+# needed. Run it with: npm run dev (see .env.example / README.md for the required environment
+# variables, all pointed at the ports this Compose file publishes to the host).
+
+volumes:
+  kratos-postgres:
+  dex-data:
